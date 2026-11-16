@@ -46,6 +46,7 @@ async function updatePushControls() {
   const ios=/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
   $('install-hint').hidden=!ios || installed;
   const sub=registration ? await registration.pushManager.getSubscription() : null;
+  if (!sub) subscriptionConfirmed=false;
   $('enable-push').textContent=sub && subscriptionConfirmed ? 'Уведомления включены' : 'Включить уведомления';
   $('enable-push').disabled=demo || !supported || (ios && !installed) || (Boolean(sub) && subscriptionConfirmed) || !state?.vapidPublicKey;
   $('push-controls').hidden=!sub;
@@ -84,16 +85,17 @@ $('enable-push').addEventListener('click',async()=>{
   try {
     if (await Notification.requestPermission()!=='granted') throw new Error('Уведомления не разрешены. Разрешение можно изменить в настройках устройства.');
     const key=Uint8Array.from(atob(state.vapidPublicKey.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
-    const sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+    const existing=await registration.pushManager.getSubscription();
+    const sub=existing || await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
     try {await api('/api/subscription',{method:'POST',body:JSON.stringify(sub.toJSON())});}
-    catch(error) {await sub.unsubscribe();throw error;}
+    catch(error) {if (!existing) await sub.unsubscribe();throw error;}
     subscriptionConfirmed=true;
     showMessage('Уведомления подключены. Отправьте тест, чтобы проверить доставку.');
   } catch(error) {showMessage(error.message || 'Не удалось включить уведомления.');}
   finally {await updatePushControls();}
 });
 $('disable-push').addEventListener('click',async()=>{
-  try {const sub=await registration.pushManager.getSubscription();if(sub){await api('/api/subscription',{method:'DELETE',body:JSON.stringify(sub.toJSON())});await sub.unsubscribe();}await updatePushControls();showMessage('Уведомления на этом устройстве отключены.');}
+  try {const sub=await registration.pushManager.getSubscription();if(sub){await api('/api/subscription',{method:'DELETE',body:JSON.stringify(sub.toJSON())});await sub.unsubscribe();}subscriptionConfirmed=false;await updatePushControls();showMessage('Уведомления на этом устройстве отключены.');}
   catch(error){showMessage(error.message);}
 });
 $('test-push').addEventListener('click',async()=>{
