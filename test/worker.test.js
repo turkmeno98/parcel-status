@@ -121,3 +121,41 @@ test('connecting Sheets after the first poll backfills the existing history once
     assert.equal(data.get('state').sheetQueue.length,0);
   } finally {globalThis.fetch=original;}
 });
+
+test('internal polling endpoint cannot bypass API authorization on Durable Object',async()=>{
+  const {monitor}=fixture();
+  const res=await monitor.fetch(new Request('https://monitor/internal/poll',{method:'POST'}));
+  assert.equal(res.status,403);
+});
+test('push failure schedules a retry alarm and does not discard pending deliveries',async()=>{
+  const {monitor,data}=fixture();
+  const alarms=[];monitor.ctx.storage.setAlarm=async t=>alarms.push(t);
+  monitor.ctx.storage.getAlarm=async()=>null;
+  monitor.ctx.storage.deleteAlarm=async()=>{};
+  const event={key:'1:1794829439881323000',name:'В пути'};
+  data.set('state',{events:[],latest:null,subscriptions:[{endpoint:'https://web.push.apple.com/test',keys:{p256dh:'B'+'a'.repeat(86),auth:'a'.repeat(22)}}],deliveries:[{endpoint:'https://web.push.apple.com/test',event}],sheetQueue:[]});
+  await monitor.flush(await monitor.load());
+  assert.equal(data.get('state').deliveries.length,1);
+  assert.equal(alarms.length,1);
+});
+test('sheet failures retain all queued events beyond 100 until acknowledgement',async()=>{
+  const {monitor,env,data}=fixture();
+  env.SHEETS_WEBHOOK_URL='https://script.google.com/macros/s/test/exec';
+  env.SHEETS_WEBHOOK_SECRET='test-secret';
+  const events=Array.from({length:130},(_,i)=>({key:'1:'+(1794829439881323000n+BigInt(i)),name:'В пути',at:'2026-11-16T11:43:59.881Z'}));
+  data.set('state',{events:[],latest:null,subscriptions:[],deliveries:[],sheetQueue:events,sheetInitialized:true});
+  const old=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('offline');};
+  try {await monitor.flush(await monitor.load());assert.equal(data.get('state').sheetQueue.length,130);}
+  finally {globalThis.fetch=old;}
+});
+test('authenticated recheck can recover from an incorrectly final upstream event',async()=>{
+  const {monitor,data}=fixture();
+  const event={key:'1:1794829439881323000',ns:'1794829439881323000',at:'2026-11-16T11:43:59.881Z',name:'Доставлено',final:true};
+  data.set('state',{events:[event],latest:event,subscriptions:[],deliveries:[],sheetQueue:[]});
+  const old=globalThis.fetch;globalThis.fetch=async()=>new Response('[{"status_id":"2","status_name":"В пути","date":1794829439881323001,"is_final":false}]');
+  try {
+    const res=await monitor.fetch(new Request('https://monitor/api/recheck',{method:'POST',headers:{Authorization:'Bearer '+key}}));
+    assert.equal(res.status,200);
+    assert.equal((await monitor.view()).stopped,false);
+  } finally {globalThis.fetch=old;}
+});
