@@ -7,6 +7,7 @@ let subscriptionConfirmed=false;
 const demo=new URLSearchParams(location.search).has('demo');
 const dateFormat=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'});
 const errors={UNAUTHORIZED:'Ключ трекера не подошёл.',RATE_LIMIT:'Слишком много попыток. Попробуйте позже.',WB_SETUP:'На сервере ещё не настроен доступ к Wildberries.',WB_AUTH:'Нужно обновить доступ к Wildberries на сервере.',WB_RESPONSE:'Wildberries не вернул историю. Сохранён последний известный статус.',WB_DATE:'Не удалось прочитать время события Wildberries.',WB_UNAVAILABLE:'Wildberries сейчас недоступен. Сохранён последний известный статус.',SUBSCRIPTION:'Не удалось подключить уведомления этого браузера.',SUBSCRIPTION_LIMIT:'Подключено слишком много устройств.',NO_SUBSCRIPTION:'Сначала включите уведомления.',UNAVAILABLE:'Сервер временно недоступен.'};
+errors.WB_TOKEN_FORMAT='В секрете WB_TOKEN сохранён не access token. Обновите его в Cloudflare, вставив только значение токена.';
 const showMessage=text=>{$('message').textContent=text;};
 
 async function api(path,options={}) {

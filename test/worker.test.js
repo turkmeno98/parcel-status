@@ -4,7 +4,7 @@ import worker, { Monitor } from '../src/worker.js';
 const key = 'test-only-key-with-at-least-32-characters';
 function fixture() {
   const data = new Map();
-  const env = {API_KEY:key, WB_TOKEN:'test-only', WB_RID:'test.order', APP_ORIGIN:'https://example.github.io', APP_URL:'https://example.github.io/parcel/', VAPID_PUBLIC_KEY:'test'};
+  const env = {API_KEY:key, WB_TOKEN:'test.header.signature', WB_RID:'test.order', APP_ORIGIN:'https://example.github.io', APP_URL:'https://example.github.io/parcel/', VAPID_PUBLIC_KEY:'test'};
   const monitor = new Monitor({storage:{get: async k => structuredClone(data.get(k)),put:async(k,v)=>data.set(k,structuredClone(v))}},env);
   return {monitor,env,data};
 }
@@ -70,4 +70,39 @@ test('failed push stays queued and repeated WB data does not duplicate the job',
     assert.equal(data.get('state').deliveries.length,1);
     assert.equal(data.get('state').latest.key,'115:1794829439881323001');
   } finally {globalThis.fetch=oldFetch;}
+});
+test('reports the upstream HTTP status without exposing credentials or response bodies',async()=>{
+  const {monitor,data}=fixture();
+  const original=globalThis.fetch;
+  globalThis.fetch=async()=>new Response('private upstream response',{status:429});
+  try {
+    await monitor.poll();
+    const view=await monitor.view();
+    assert.equal(view.upstreamStatus,429);
+    assert.equal(view.error,'WB_UNAVAILABLE');
+    assert.equal(JSON.stringify(view).includes('private upstream response'),false);
+    assert.equal(JSON.stringify(view).includes('test-only'),false);
+  } finally {globalThis.fetch=original;}
+});
+test('invalid pasted WB token is reported before attempting a network request',async()=>{
+  const {monitor,env}=fixture();
+  env.WB_TOKEN='сюда случайно вставлен текст';
+  const original=globalThis.fetch;let called=false;
+  globalThis.fetch=async()=>{called=true;throw new Error('must not fetch');};
+  try {
+    await monitor.poll();
+    assert.equal((await monitor.view()).error,'WB_TOKEN_FORMAT');
+    assert.equal(called,false);
+  } finally {globalThis.fetch=original;}
+});
+test('successful WB polling uses a redirect policy supported by Cloudflare Workers',async()=>{
+  const {monitor}=fixture();
+  const original=globalThis.fetch;
+  globalThis.fetch=async(_url,init)=>{
+    if(init.redirect==='error') throw new TypeError('Workers does not implement redirect error');
+    if(init.redirect!=='manual') throw new Error('Authorization must never follow redirects');
+    return new Response('[{"status_id":"115","status_name":"В центре","date":1794829439881323000,"is_final":false}]');
+  };
+  try {await monitor.poll();assert.equal((await monitor.view()).events.length,1);}
+  finally {globalThis.fetch=original;}
 });

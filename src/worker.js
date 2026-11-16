@@ -102,6 +102,7 @@ export class Monitor {
     const state=await this.load();
     return {product:this.env.PRODUCT_NAME || 'Ваш заказ',events:state.events,
       checkedAt:state.checkedAt || null, error:state.error || null,
+      upstreamStatus:state.upstreamStatus || null, transportError:state.transportError || null,
       pendingPush:state.deliveries.length, notificationError:state.notificationError || null,
       sheetError:state.sheetError || null, sheetConfigured:Boolean(this.env.SHEETS_WEBHOOK_URL),
       sheetUrl:this.env.SHEET_URL || null, vapidPublicKey:this.env.VAPID_PUBLIC_KEY || null,
@@ -112,14 +113,19 @@ export class Monitor {
     if (state.attemptedAt && Date.now()-Date.parse(state.attemptedAt)<60000) return;
     if (state.latest?.final) { await this.flush(state); return; }
     state.attemptedAt=new Date().toISOString();
+    state.upstreamStatus=null;
+    state.transportError=null;
     await this.storage.put('state',state);
     try {
       if (!this.env.WB_TOKEN || !this.env.WB_RID) throw new Error('WB_SETUP');
       if (!/^[A-Za-z0-9._-]{1,180}$/.test(this.env.WB_RID)) throw new Error('WB_SETUP');
+      const wbToken=this.env.WB_TOKEN.trim().replace(/^Bearer\s+/i,'');
+      if (wbToken.length>8000 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(wbToken)) throw new Error('WB_TOKEN_FORMAT');
       const result=await fetch('https://status-tracker.wb.ru/api/v6/statuses/'+this.env.WB_RID+'?lang=ru',{
-        headers:{Authorization:'Bearer '+this.env.WB_TOKEN,Accept:'application/json'},
-        redirect:'error',signal:AbortSignal.timeout(15000),
+        headers:{Authorization:'Bearer '+wbToken,Accept:'application/json'},
+        redirect:'manual',signal:AbortSignal.timeout(15000),
       });
+      state.upstreamStatus=result.status;
       if ([401,403].includes(result.status)) throw new Error('WB_AUTH');
       if (!result.ok) throw new Error('WB_UNAVAILABLE');
       const events=parseStatuses(await result.text());
@@ -131,7 +137,8 @@ export class Monitor {
       if (this.env.SHEETS_WEBHOOK_URL) state.sheetQueue.push(...rowsForSheet);
       await this.storage.put('state',state);
     } catch (error) {
-      state.error=['WB_SETUP','WB_AUTH','WB_RESPONSE','WB_DATE','WB_UNAVAILABLE'].includes(error.message) ? error.message : 'WB_UNAVAILABLE';
+      if (!state.upstreamStatus) state.transportError=['TimeoutError','AbortError','TypeError'].includes(error.name) ? error.name : 'NetworkError';
+      state.error=['WB_SETUP','WB_TOKEN_FORMAT','WB_AUTH','WB_RESPONSE','WB_DATE','WB_UNAVAILABLE'].includes(error.message) ? error.message : 'WB_UNAVAILABLE';
       await this.storage.put('state',state);
     }
     await this.flush(state);
@@ -148,7 +155,7 @@ export class Monitor {
         const request=await buildPushPayload({data:JSON.stringify({title:'Посылка',body:job.event.name,tag:job.event.key}),options:{ttl:3600}},sub,{
           subject:this.env.VAPID_SUBJECT,publicKey:this.env.VAPID_PUBLIC_KEY,privateKey:this.env.VAPID_PRIVATE_KEY,
         });
-        const response=await fetch(sub.endpoint,{...request,redirect:'error',signal:AbortSignal.timeout(10000)});
+        const response=await fetch(sub.endpoint,{...request,redirect:'manual',signal:AbortSignal.timeout(10000)});
         if ([404,410].includes(response.status)) {
           state.subscriptions=state.subscriptions.filter(item=>item.endpoint!==sub.endpoint);
         } else if (!response.ok) throw new Error('PUSH_UNAVAILABLE');
@@ -168,7 +175,7 @@ export class Monitor {
         if ([301,302,303].includes(result.status)) {
           const target=new URL(result.headers.get('Location'));
           if (target.protocol!=='https:' || target.hostname!=='script.googleusercontent.com') throw new Error('SHEETS_REDIRECT');
-          reply=await fetch(target.href,{redirect:'error',signal:AbortSignal.timeout(10000)});
+          reply=await fetch(target.href,{redirect:'manual',signal:AbortSignal.timeout(10000)});
         }
         if (!reply.ok || (await reply.json()).ok!==true) throw new Error('SHEETS_RESPONSE');
         state.sheetQueue=state.sheetQueue.slice(100);state.sheetError=null;
