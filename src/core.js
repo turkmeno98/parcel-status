@@ -21,9 +21,9 @@ export function mergeObservation(previous, events) {
   const merged = [...new Map([...(previous?.events || []), ...events].map(event => [event.key,event])).values()]
     .sort((a,b) => BigInt(a.ns) < BigInt(b.ns) ? -1 : BigInt(a.ns) > BigInt(b.ns) ? 1 : a.key.localeCompare(b.key))
     .slice(-100);
-  const known = new Set(previous?.events.map(event => event.key));
-  const changes = previous ? events.filter(event => !known.has(event.key) && BigInt(event.ns) >= BigInt(previous.latest.ns)) : [];
-  return {state:{events:merged, latest:merged.at(-1)}, changes};
+  const known = new Set((previous?.events || []).map(event => event.key));
+  const changes = previous ? events.filter(event => !known.has(event.key) && (!previous.latest || BigInt(event.ns) >= BigInt(previous.latest.ns))) : [];
+  return {state:{events:merged, latest:merged.at(-1) || null}, changes};
 }
 
 export function validateSubscription(value) {
