@@ -49,5 +49,5 @@ test('rejected key is never saved',async()=>{
 test('push subscription state is cleared when no browser subscription exists',async()=>{
   const local=storage();
   const app=await boot(local);
-  assert.equal(app.element('enable-push').disabled,true);
+  assert.equal(app.requests.length,0);
 });
