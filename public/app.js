@@ -1,6 +1,7 @@
 const $=id=>document.getElementById(id);
 let server=localStorage.getItem('parcel-server') || 'https://parcel-status.parcel-status.workers.dev';
-let accessKey=sessionStorage.getItem('parcel-key') || '';
+let accessKey=localStorage.getItem('parcel-key') || sessionStorage.getItem('parcel-key') || '';
+if (accessKey) {localStorage.setItem('parcel-key',accessKey);sessionStorage.removeItem('parcel-key');}
 let state=null;
 let registration=null;
 let subscriptionConfirmed=false;
@@ -70,13 +71,13 @@ $('connection-form').addEventListener('submit',async event=>{
     const oldServer=server,oldKey=accessKey;
     server=url.origin;accessKey=key;
     try {state=await api('/api/state');} catch(error) {server=oldServer;accessKey=oldKey;throw error;}
-    localStorage.setItem('parcel-server',server);sessionStorage.setItem('parcel-key',accessKey);
+    localStorage.setItem('parcel-server',server);localStorage.setItem('parcel-key',accessKey);sessionStorage.removeItem('parcel-key');
     $('settings').close();render();await updatePushControls();
   } catch(error) {$('access-key').setCustomValidity(error.message);$('access-key').reportValidity();}
 });
 $('access-key').addEventListener('input',()=>$('access-key').setCustomValidity(''));
 $('server').addEventListener('input',()=>$('access-key').setCustomValidity(''));
-$('disconnect').addEventListener('click',()=>{sessionStorage.removeItem('parcel-key');accessKey='';location.reload();});
+$('disconnect').addEventListener('click',()=>{localStorage.removeItem('parcel-key');sessionStorage.removeItem('parcel-key');accessKey='';location.reload();});
 $('enable-push').addEventListener('click',async()=>{
   if (!state) {openSettings();return;}
   $('enable-push').disabled=true;

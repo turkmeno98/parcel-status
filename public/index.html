@@ -35,10 +35,10 @@
   </main>
   <dialog id="settings"><form id="connection-form">
     <div class="dialog-title"><h2>Подключение</h2><button type="button" id="settings-close" class="icon-button" aria-label="Закрыть">×</button></div>
-    <p class="hint">Введите адрес облачного трекера и его ключ. Токен Wildberries сюда вводить не нужно.</p>
+    <p class="hint">Введите адрес облачного трекера и его ключ. Ключ сохранится на этом устройстве до выхода из трекера или очистки данных сайта. Токен Wildberries сюда вводить не нужно.</p>
     <label for="server">Адрес сервера</label><input id="server" name="server" type="url" placeholder="https://parcel-status.….workers.dev" required autocomplete="url" spellcheck="false">
     <label for="access-key">Ключ трекера</label><input id="access-key" name="key" type="password" required minlength="32" maxlength="128" autocomplete="off">
-    <p class="hint">Ключ хранится до закрытия сеанса приложения. Уведомления продолжат приходить после закрытия.</p>
+    <p class="hint">Закрытие приложения не удаляет ключ. Уведомления продолжат приходить после закрытия.</p>
     <button type="submit" class="primary">Подключить</button><button id="disconnect" class="text-button" type="button">Выйти из трекера</button>
   </form></dialog>
   <script type="module" src="./app.js"></script>

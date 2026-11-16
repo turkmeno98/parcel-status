@@ -1,4 +1,4 @@
-const CACHE='parcel-shell-v1';
+const CACHE='parcel-shell-v3';
 const shell=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(shell)));});
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith('parcel-shell-') && key!==CACHE)await caches.delete(key);await self.clients.claim();})());});
