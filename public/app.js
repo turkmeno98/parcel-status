@@ -36,10 +36,6 @@ function render() {
     row.append(name,time);$('timeline').append(row);
   }
   if (!state.events.length) {const row=document.createElement('li');row.className='empty';row.textContent='Здесь появятся этапы доставки';$('timeline').append(row);}
-  const link=state.sheetUrl;
-  $('sheet-link').hidden=!link || !/^https:\/\/docs\.google\.com\/spreadsheets\/d\/[\w-]+/.test(link);
-  if (!$('sheet-link').hidden) $('sheet-link').href=link;
-  $('sheet-hint').textContent=state.sheetError ? 'Запись в Google Таблицу задерживается. История сохранена на сервере.' : !state.sheetConfigured && !demo ? 'Google Таблица ещё не подключена к серверу.' : '';
   showMessage(state.error ? errors[state.error] || 'Не удалось обновить статус.' : state.notificationError ? 'Доставка уведомления задерживается. Сервер повторит попытку.' : state.stopped ? 'Заказ завершён. Дальнейшие проверки остановлены.' : '');
 }
 async function updatePushControls() {
