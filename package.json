@@ -1,0 +1,16 @@
+{
+  "name": "parcel-status",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "packageManager": "npm@11.17.0",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "dev": "wrangler dev --local --port 8787",
+    "check": "wrangler deploy --dry-run --outdir .build",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": { "@block65/webcrypto-web-push": "2.0.0" },
+  "devDependencies": { "wrangler": "4.163.0" }
+}
