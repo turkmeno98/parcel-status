@@ -25,6 +25,18 @@ async function api(path,options={}) {
 function render() {
   $('product').textContent=state.product && !/parcel status|staging/i.test(state.product) ? state.product : 'Vivo X300 FE · 12/256 ГБ';
   const latest=state.events.at(-1);
+  const events=state.events || [];
+  const names=events.map(event=>event.name.toLowerCase());
+  const has=pattern=>names.some(name=>pattern.test(name));
+  let stage=0;
+  if (events.length) stage=1;
+  if (has(/в пути|едет|транзит|отправлен|выезжает|покинул|перевоз/)) stage=Math.max(stage,2);
+  if (has(/сортиров|пункт выдачи|прибыл|приехал|доставлен в/)) stage=Math.max(stage,3);
+  if (state.stopped && has(/получен|вручен|выдан/)) stage=4;
+  $('progress-fill').style.width=stage ? [0,18,48,76,100][stage]+'%' : '0%';
+  $('progress-label').textContent=['Ожидаем данные','Отправлена','В пути','На сортировке','Получена'][stage];
+  $('history-count').textContent=events.length ? events.length+' '+(events.length%10===1 && events.length%100!==11?'событие':events.length%10>=2 && events.length%10<=4 && (events.length%100<12 || events.length%100>14)?'события':'событий') : '';
+
   $('status-name').textContent=latest?.name==='Приехал в сортировочный центр' ? 'В сортировочном центре' : latest?.name || 'Ждём первую проверку';
   $('event-date').textContent=latest ? dateFormat.format(new Date(latest.at)) : 'Сервер проверит заказ после настройки доступа';
   $('checked-at').textContent=state.checkedAt ? 'Проверено '+dateFormat.format(new Date(state.checkedAt)) : 'Проверка ещё не выполнена';
