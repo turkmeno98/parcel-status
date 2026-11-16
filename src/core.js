@@ -1,7 +1,8 @@
 export function parseStatuses(raw) {
   if (typeof raw !== 'string' || raw.length > 262144) throw new Error('WB_RESPONSE');
   // WB uses integer nanoseconds, beyond JavaScript's safe integer range.
-  const rows = JSON.parse(raw.replace(/("date"\s*:\s*)(\d{16,22})(?=\s*[,}])/g, '$1"$2"'));
+  const payload = JSON.parse(raw.replace(/("date"\s*:\s*)(\d{16,22})(?=\s*[,}])/g, '$1"$2"'));
+  const rows = Array.isArray(payload) && payload.length === 1 && Array.isArray(payload[0]) ? payload[0] : payload;
   if (!Array.isArray(rows) || !rows.length || rows.length > 200) throw new Error('WB_RESPONSE');
   const events = rows.map(row => {
     if (!row || typeof row.status_id !== 'string' || !/^\d{1,8}$/.test(row.status_id) ||
