@@ -10,6 +10,7 @@ const dateFormat=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',day:'
 const errors={UNAUTHORIZED:'Ключ трекера не подошёл.',RATE_LIMIT:'Слишком много попыток. Попробуйте позже.',WB_SETUP:'На сервере ещё не настроен доступ к Wildberries.',WB_AUTH:'Нужно обновить доступ к Wildberries на сервере.',WB_RESPONSE:'Wildberries не вернул историю. Сохранён последний известный статус.',WB_DATE:'Не удалось прочитать время события Wildberries.',WB_UNAVAILABLE:'Wildberries сейчас недоступен. Сохранён последний известный статус.',SUBSCRIPTION:'Не удалось подключить уведомления этого браузера.',SUBSCRIPTION_LIMIT:'Подключено слишком много устройств.',NO_SUBSCRIPTION:'Сначала включите уведомления.',UNAVAILABLE:'Сервер временно недоступен.'};
 errors.WB_TOKEN_FORMAT='В секрете WB_TOKEN сохранён не access token. Обновите его в Cloudflare, вставив только значение токена.';
 const showMessage=text=>{$('message').textContent=text;};
+const pushTimeout=(promise,step)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Превышено время ожидания: '+step+'. Перезапустите приложение и попробуйте снова.')),12000))]);
 
 async function api(path,options={}) {
   if (demo) throw new Error('В демонстрации нет подключения к серверу.');
@@ -83,16 +84,21 @@ $('enable-push').addEventListener('click',async()=>{
   if (!state) {openSettings();return;}
   $('enable-push').disabled=true;
   try {
-    if (await Notification.requestPermission()!=='granted') throw new Error('Уведомления не разрешены. Разрешение можно изменить в настройках устройства.');
+    showMessage('Запрашиваем разрешение на уведомления…');
+    if (await pushTimeout(Notification.requestPermission(),'разрешение iOS')!=='granted') throw new Error('Уведомления не разрешены. Разрешение можно изменить в настройках устройства.');
     const key=Uint8Array.from(atob(state.vapidPublicKey.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
-    const existing=await registration.pushManager.getSubscription();
-    const sub=existing || await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
-    try {await api('/api/subscription',{method:'POST',body:JSON.stringify(sub.toJSON())});}
+    if (!registration) throw new Error('Service Worker не зарегистрирован. Перезапустите приложение.');
+    showMessage('Проверяем Push-подписку…');
+    const existing=await pushTimeout(registration.pushManager.getSubscription(),'проверка подписки');
+    showMessage('Создаём Push-подписку…');
+    const sub=existing || await pushTimeout(registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key}),'подписка iOS');
+    showMessage('Сохраняем подписку на сервере…');
+    try {await pushTimeout(api('/api/subscription',{method:'POST',body:JSON.stringify(sub.toJSON())}),'сохранение на сервере');}
     catch(error) {if (!existing) await sub.unsubscribe();throw error;}
     subscriptionConfirmed=true;
     showMessage('Уведомления подключены. Отправьте тест, чтобы проверить доставку.');
   } catch(error) {showMessage(error.message || 'Не удалось включить уведомления.');}
-  finally {await updatePushControls();}
+  finally {try {await pushTimeout(updatePushControls(),'обновление кнопки');} catch(error) {showMessage(error.message);$('enable-push').disabled=false;}}
 });
 $('disable-push').addEventListener('click',async()=>{
   try {const sub=await registration.pushManager.getSubscription();if(sub){await api('/api/subscription',{method:'DELETE',body:JSON.stringify(sub.toJSON())});await sub.unsubscribe();}subscriptionConfirmed=false;await updatePushControls();showMessage('Уведомления на этом устройстве отключены.');}
