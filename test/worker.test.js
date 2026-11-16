@@ -51,3 +51,23 @@ test('first successful observation is silent and repeated response creates no pu
     assert.equal(data.get('state').deliveries.length,0);
   } finally {globalThis.fetch = oldFetch;}
 });
+test('failed push stays queued and repeated WB data does not duplicate the job',async()=>{
+  const {monitor,data}=fixture();
+  const oldFetch=globalThis.fetch;
+  let raw='[{"status_id":"199","status_name":"В пути","date":1794829439881323000,"is_final":false}]';
+  globalThis.fetch=async()=>new Response(raw);
+  try {
+    await monitor.poll();
+    const state=data.get('state');
+    state.subscriptions=[{endpoint:'https://web.push.apple.com/test',keys:{p256dh:'B'+'a'.repeat(86),auth:'a'.repeat(22)}}];
+    state.attemptedAt=null;
+    raw='[{"status_id":"115","status_name":"В центре","date":1794829439881323001,"is_final":false}]';
+    await monitor.poll();
+    assert.equal(data.get('state').deliveries.length,1);
+    assert.equal(data.get('state').notificationError,'PUSH_UNAVAILABLE');
+    data.get('state').attemptedAt=null;
+    await monitor.poll();
+    assert.equal(data.get('state').deliveries.length,1);
+    assert.equal(data.get('state').latest.key,'115:1794829439881323001');
+  } finally {globalThis.fetch=oldFetch;}
+});
