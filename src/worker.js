@@ -137,8 +137,10 @@ export class Monitor {
       if (!/^[A-Za-z0-9._-]{1,180}$/.test(this.env.WB_RID)) throw new Error('WB_SETUP');
       const wbToken=this.env.WB_TOKEN.trim().replace(/^Bearer\s+/i,'');
       if (wbToken.length>8000 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(wbToken)) throw new Error('WB_TOKEN_FORMAT');
-      const result=await fetch('https://status-tracker.wb.ru/api/v6/statuses/'+this.env.WB_RID+'?lang=ru',{
-        headers:{Authorization:'Bearer '+wbToken,Accept:'application/json'},
+      const result=await fetch('https://status-tracker.wb.ru/api/v6/statuses?lang=ru',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+wbToken,Accept:'application/json','Content-Type':'application/json'},
+        body:JSON.stringify({ids:[this.env.WB_RID]}),
         redirect:'manual',signal:AbortSignal.timeout(15000),
       });
       state.upstreamStatus=result.status;
