@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Посылка">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.workers.dev; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <title>Посылка — статус заказа</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="./">Посылка</a><button id="settings-open" class="icon-button" aria-label="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 1 3h4l1-3 3-1 2-3-2-2 1-3-3-2-1-3Z"/><circle cx="10.5" cy="11.5" r="3"/></svg></button></header>
+    <p id="demo-note" class="notice" hidden>Демонстрация интерфейса. Это не текущий статус.</p>
+    <section aria-labelledby="order-title" class="order">
+      <h1 id="order-title">Ваш заказ</h1><p id="product" class="subtitle">Подключите трекер, чтобы видеть доставку</p>
+      <div class="status-panel">
+        <svg class="parcel-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="m5 14 19-10 19 10v23L24 47 5 37Z M5 14l19 10 19-10M24 24v23M14 9l20 10"/></svg>
+        <div><h2 id="status-name">Пока нет данных</h2><p id="event-date">Нужен адрес сервера и ключ доступа</p></div>
+      </div>
+      <div class="checked"><p id="checked-at">Облачный трекер не подключён</p><button id="refresh" class="icon-button" aria-label="Проверить статус" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></svg></button></div>
+      <button id="enable-push" class="primary">Подключить трекер</button>
+      <p id="install-hint" class="hint" hidden>На iPhone: Safari → Поделиться → На экран «Домой». Затем откройте приложение с иконки, чтобы включить уведомления.</p>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+      <div id="push-controls" class="push-controls" hidden><button id="test-push" class="text-button">Тестовое уведомление</button><button id="disable-push" class="text-button">Отключить на этом устройстве</button></div>
+    </section>
+    <section class="history" aria-labelledby="history-title"><h2 id="history-title">История доставки</h2><ol id="timeline"><li class="empty">Здесь появятся этапы доставки</li></ol></section>
+    <footer><a id="sheet-link" hidden target="_blank" rel="noopener noreferrer">Открыть Google Таблицу</a><p id="sheet-hint" class="hint"></p><p class="hint">Время по Москве. Проверка каждые 15 минут.</p></footer>
+  </main>
+  <dialog id="settings"><form id="connection-form">
+    <div class="dialog-title"><h2>Подключение</h2><button type="button" id="settings-close" class="icon-button" aria-label="Закрыть">×</button></div>
+    <p class="hint">Введите адрес облачного трекера и его ключ. Токен Wildberries сюда вводить не нужно.</p>
+    <label for="server">Адрес сервера</label><input id="server" name="server" type="url" placeholder="https://parcel-status.….workers.dev" required autocomplete="url" spellcheck="false">
+    <label for="access-key">Ключ трекера</label><input id="access-key" name="key" type="password" required minlength="32" maxlength="128" autocomplete="off">
+    <p class="hint">Ключ хранится до закрытия сеанса приложения. Уведомления продолжат приходить после закрытия.</p>
+    <button type="submit" class="primary">Подключить</button><button id="disconnect" class="text-button" type="button">Выйти из трекера</button>
+  </form></dialog>
+  <script type="module" src="./app.js"></script>
+</body></html>

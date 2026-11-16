@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "parcel-status",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "vars": {
+    "APP_ORIGIN": "https://turkmeno98.github.io",
+    "APP_URL": "https://turkmeno98.github.io/parcel-status/",
+    "PRODUCT_NAME": "VIVO X300 FE · 12 + 256 ГБ",
+    "VAPID_SUBJECT": "https://turkmeno98.github.io/parcel-status/",
+    "SHEET_URL": ""
+  },
+  "durable_objects": { "bindings": [{ "name": "MONITOR", "class_name": "Monitor" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Monitor"] }],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": false }
+}
