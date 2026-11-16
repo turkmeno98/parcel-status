@@ -23,7 +23,7 @@ async function api(path,options={}) {
   return data;
 }
 function render() {
-  $('product').textContent=state.product;
+  $('product').textContent=state.product && !/parcel status|staging/i.test(state.product) ? state.product : 'Vivo X300 FE · 12/256 ГБ';
   const latest=state.events.at(-1);
   $('status-name').textContent=latest?.name==='Приехал в сортировочный центр' ? 'В сортировочном центре' : latest?.name || 'Ждём первую проверку';
   $('event-date').textContent=latest ? dateFormat.format(new Date(latest.at)) : 'Сервер проверит заказ после настройки доступа';
