@@ -19,22 +19,23 @@
     <header><a class="brand" href="./"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="m5 14 19-10 19 10v23L24 47 5 37Z M5 14l19 10 19-10M24 24v23M14 9l20 10"/></svg>Посылка</a><button id="settings-open" class="icon-button" aria-label="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 1 3h4l1-3 3-1 2-3-2-2 1-3-3-2-1-3Z"/><circle cx="10.5" cy="11.5" r="3"/></svg></button></header>
     <p id="demo-note" class="notice" hidden>Демонстрация интерфейса. Это не текущий статус.</p>
     <section aria-labelledby="order-title" class="order">
-      <h1 id="order-title">Моя посылка</h1>
+      <div class="section-kicker">WILDBERRIES · ОТСЛЕЖИВАНИЕ</div><h1 id="order-title">Моя посылка</h1>
       <div class="product-card">
-        <div class="product-copy"><p id="product" class="subtitle">Vivo X300 FE · 12/256 ГБ</p><p class="product-color">Графитовый чёрный</p></div>
+        <div class="product-copy"><span class="product-tag">Смартфон</span><p id="product" class="subtitle">Vivo X300 FE · 12/256 ГБ</p><p class="product-color">Графитовый чёрный</p></div>
         <img class="product-photo" src="./vivo-x300-fe-black.png" width="640" height="640" alt="VIVO X300 FE в графитовом чёрном цвете" fetchpriority="high" decoding="async">
       </div>
       <div class="status-panel">
         <svg class="parcel-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="m5 14 19-10 19 10v23L24 47 5 37Z M5 14l19 10 19-10M24 24v23M14 9l20 10"/></svg>
         <div><h2 id="status-name">Пока нет данных</h2><p id="event-date">Нужен адрес сервера и ключ доступа</p></div>
       </div>
+      <div class="delivery-progress" aria-label="Этап доставки"><div class="progress-heading"><strong>Путь посылки</strong><span id="progress-label">Ожидаем данные</span></div><div class="progress-track" aria-hidden="true"><span id="progress-fill"></span></div><div class="progress-stops"><span>Отправлена</span><span>В пути</span><span>Сортировка</span><span>Получена</span></div></div>
       <div class="checked"><p id="checked-at">Облачный трекер не подключён</p><button id="refresh" class="icon-button" aria-label="Проверить статус" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></svg></button></div>
       <button id="enable-push" class="primary">Подключить трекер</button>
       <p id="install-hint" class="hint" hidden>На iPhone: Safari → Поделиться → На экран «Домой». Затем откройте приложение с иконки, чтобы включить уведомления.</p>
       <p id="message" class="message" role="status" aria-live="polite"></p>
       <div id="push-controls" class="push-controls" hidden><button id="test-push" class="text-button">Тестовое уведомление</button><button id="disable-push" class="text-button">Отключить на этом устройстве</button></div>
     </section>
-    <section class="history" aria-labelledby="history-title"><h2 id="history-title">История доставки</h2><ol id="timeline"><li class="empty">Здесь появятся этапы доставки</li></ol></section>
+    <section class="history" aria-labelledby="history-title"><div class="history-heading"><h2 id="history-title">История доставки</h2><span id="history-count" class="history-count"></span></div><ol id="timeline"><li class="empty">Здесь появятся этапы доставки</li></ol></section>
     <footer><p class="hint">Время по Москве. Проверка каждые 15 минут.</p></footer>
   </main>
   <dialog id="settings"><form id="connection-form">
