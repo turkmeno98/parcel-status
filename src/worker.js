@@ -50,7 +50,7 @@ export class Monitor {
   alarm() { return this.exclusive(async()=>{ const state=await this.load(); await this.flush(state); }); }
   async scheduleRetry(state) {
     if (!this.ctx.storage.setAlarm || !this.ctx.storage.deleteAlarm) return;
-    if (state.deliveries.length || (state.sheetQueue.length && this.env.SHEETS_WEBHOOK_URL)) {
+    if (state.deliveries.length) {
       const current=await this.ctx.storage.getAlarm();
       if (!current || current<=Date.now()) await this.ctx.storage.setAlarm(Date.now()+60000);
     } else await this.ctx.storage.deleteAlarm();
@@ -112,7 +112,7 @@ export class Monitor {
     return fail('NOT_FOUND',404);
   }
   async load() {
-    return await this.storage.get('state') || {events:[],latest:null,subscriptions:[],deliveries:[],sheetQueue:[]};
+    return await this.storage.get('state') || {events:[],latest:null,subscriptions:[],deliveries:[]};
   }
   async view() {
     const state=await this.load();
@@ -120,8 +120,7 @@ export class Monitor {
       checkedAt:state.checkedAt || null, error:state.error || null,
       upstreamStatus:state.upstreamStatus || null, transportError:state.transportError || null,
       pendingPush:state.deliveries.length, notificationError:state.notificationError || null,
-      sheetError:state.sheetError || null, sheetConfigured:Boolean(this.env.SHEETS_WEBHOOK_URL),
-      sheetUrl:this.env.SHEET_URL || null, vapidPublicKey:this.env.VAPID_PUBLIC_KEY || null,
+      vapidPublicKey:this.env.VAPID_PUBLIC_KEY || null,
       stopped:state.latest?.final || false};
   }
   async poll() {
@@ -150,10 +149,8 @@ export class Monitor {
       const events=parseStatuses(await result.text());
       const {state:observation,changes}=mergeObservation(state.latest ? state : null,events);
       // Import WB history only on first read; later append newly observed events.
-      const rowsForSheet=state.latest ? changes : events;
       Object.assign(state,observation,{checkedAt:new Date().toISOString(),error:null});
       state.deliveries.push(...changes.flatMap(event=>state.subscriptions.map(sub=>({endpoint:sub.endpoint,event}))));
-      if (this.env.SHEETS_WEBHOOK_URL) state.sheetQueue.push(...rowsForSheet);
       await this.storage.put('state',state);
     } catch (error) {
       if (!state.upstreamStatus) state.transportError=['TimeoutError','AbortError','TypeError'].includes(error.name) ? error.name : 'NetworkError';
@@ -163,9 +160,6 @@ export class Monitor {
     await this.flush(state);
   }
   async flush(state) {
-    if (this.env.SHEETS_WEBHOOK_URL && !state.sheetInitialized) {
-      state.sheetQueue=[...new Map([...state.events,...state.sheetQueue].map(event=>[event.key,event])).values()];
-    }
     state.notificationError=null;
     const pending=[];
     for (const job of state.deliveries) {
@@ -185,24 +179,6 @@ export class Monitor {
       // shortcut: a crash between delivery and acknowledgement can redeliver; tags collapse duplicates on device.
     }
     state.deliveries=pending;
-    if (state.sheetQueue.length && this.env.SHEETS_WEBHOOK_URL) {
-      try {
-        const url=new URL(this.env.SHEETS_WEBHOOK_URL);
-        if (url.origin!=='https://script.google.com' || !/^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname) || !this.env.SHEETS_WEBHOOK_SECRET) throw new Error('SHEETS_SETUP');
-        const result=await fetch(url.href,{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({secret:this.env.SHEETS_WEBHOOK_SECRET,product:this.env.PRODUCT_NAME,events:state.sheetQueue.slice(0,100)}),
-          redirect:'manual',signal:AbortSignal.timeout(15000)});
-        // Apps Script ContentService redirects once to a Google-owned result URL.
-        let reply=result;
-        if ([301,302,303].includes(result.status)) {
-          const target=new URL(result.headers.get('Location'));
-          if (target.protocol!=='https:' || target.hostname!=='script.googleusercontent.com') throw new Error('SHEETS_REDIRECT');
-          reply=await fetch(target.href,{redirect:'manual',signal:AbortSignal.timeout(10000)});
-        }
-        if (!reply.ok || (await reply.json()).ok!==true) throw new Error('SHEETS_RESPONSE');
-        state.sheetQueue=state.sheetQueue.slice(100);state.sheetError=null;state.sheetInitialized=true;
-      } catch {state.sheetError='SHEETS_UNAVAILABLE';}
-    }
     await this.storage.put('state',state);
     await this.scheduleRetry(state);
   }
