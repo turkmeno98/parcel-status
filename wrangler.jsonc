@@ -8,8 +8,7 @@
     "APP_ORIGIN": "https://turkmeno98.github.io",
     "APP_URL": "https://turkmeno98.github.io/parcel-status/",
     "PRODUCT_NAME": "VIVO X300 FE · 12 + 256 ГБ",
-    "VAPID_SUBJECT": "https://turkmeno98.github.io/parcel-status/",
-    "SHEET_URL": ""
+    "VAPID_SUBJECT": "https://turkmeno98.github.io/parcel-status/"
   },
   "durable_objects": { "bindings": [{ "name": "MONITOR", "class_name": "Monitor" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Monitor"] }],
