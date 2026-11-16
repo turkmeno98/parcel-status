@@ -1,3 +1,4 @@
+import { DurableObject } from 'cloudflare:workers';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { authorize, mergeObservation, parseStatuses, validateSubscription } from './core.js';
 
@@ -44,8 +45,8 @@ export default {
   },
 };
 
-export class Monitor {
-  constructor(ctx,env) { this.ctx=ctx; this.storage=ctx.storage; this.env=env; this.tail=Promise.resolve(); }
+export class Monitor extends DurableObject {
+  constructor(ctx,env) { super(ctx,env); this.ctx=ctx; this.storage=ctx.storage; this.env=env; this.tail=Promise.resolve(); }
   scheduledPoll() { return this.exclusive(()=>this.poll()); }
   alarm() { return this.exclusive(async()=>{ const state=await this.load(); await this.flush(state); }); }
   async scheduleRetry(state) {
