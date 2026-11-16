@@ -1,7 +1,8 @@
 export function parseStatuses(raw) {
   if (typeof raw !== 'string' || raw.length > 262144) throw new Error('WB_RESPONSE');
   // WB uses integer nanoseconds, beyond JavaScript's safe integer range.
-  const rows = JSON.parse(raw.replace(/("date"\s*:\s*)(\d{16,22})(?=\s*[,}])/g, '$1"$2"'));
+  const payload = JSON.parse(raw.replace(/("date"\s*:\s*)(\d{16,22})(?=\s*[,}])/g, '$1"$2"'));
+  const rows = Array.isArray(payload) && payload.length === 1 && Array.isArray(payload[0]) ? payload[0] : payload;
   if (!Array.isArray(rows) || !rows.length || rows.length > 200) throw new Error('WB_RESPONSE');
   const events = rows.map(row => {
     if (!row || typeof row.status_id !== 'string' || !/^\d{1,8}$/.test(row.status_id) ||
@@ -21,9 +22,9 @@ export function mergeObservation(previous, events) {
   const merged = [...new Map([...(previous?.events || []), ...events].map(event => [event.key,event])).values()]
     .sort((a,b) => BigInt(a.ns) < BigInt(b.ns) ? -1 : BigInt(a.ns) > BigInt(b.ns) ? 1 : a.key.localeCompare(b.key))
     .slice(-100);
-  const known = new Set(previous?.events.map(event => event.key));
-  const changes = previous ? events.filter(event => !known.has(event.key) && BigInt(event.ns) >= BigInt(previous.latest.ns)) : [];
-  return {state:{events:merged, latest:merged.at(-1)}, changes};
+  const known = new Set((previous?.events || []).map(event => event.key));
+  const changes = previous ? events.filter(event => !known.has(event.key) && (!previous.latest || BigInt(event.ns) >= BigInt(previous.latest.ns))) : [];
+  return {state:{events:merged, latest:merged.at(-1) || null}, changes};
 }
 
 export function validateSubscription(value) {

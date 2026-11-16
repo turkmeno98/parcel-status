@@ -10,3 +10,43 @@ footer{padding-top:18px}footer a{display:block;background:#fff;border:1px solid 
 @media(max-width:350px){.product-card{padding:14px}.product-photo{width:115px;height:140px}.subtitle{font-size:18px}.status-panel h2{font-size:21px}.status-panel{gap:12px;padding:21px 15px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}@media(display-mode:standalone){header{padding-top:max(20px,env(safe-area-inset-top))}}
 .brand{display:flex;align-items:center;gap:10px}.brand svg{width:29px;height:31px;fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round}
+
+/* Parcel dashboard refinement */
+:root{--accent:#7027d4;--muted:#716b7e;--line:#e9e5f0;--soft:#f3edfc;background:#f7f6fb}
+body{background:radial-gradient(circle at 50% -160px,#eee5fc 0,transparent 440px),#f7f6fb}
+main{max-width:590px;padding-left:20px;padding-right:20px}
+header{border-bottom:0;padding-top:24px;padding-bottom:14px}
+.brand{font-size:24px;letter-spacing:-.7px}
+.order{padding-top:22px}
+.section-kicker{font-size:10px;letter-spacing:1.65px;font-weight:800;color:#8867b4;margin-bottom:9px}
+h1{font-size:34px;letter-spacing:-1.25px;margin-bottom:19px}
+.product-card{position:relative;overflow:hidden;min-height:200px;padding:21px;border:1px solid #ebe5f3;border-radius:25px;box-shadow:0 8px 30px #3d1b6510;background:linear-gradient(130deg,#fff 55%,#f3ecfd)}
+.product-copy{position:relative;z-index:1}
+.product-tag{display:inline-block;border-radius:30px;background:#f1e8fc;color:#7132b7;font-size:11px;font-weight:750;padding:6px 10px;margin-bottom:13px}
+.subtitle{font-size:21px;line-height:1.27;letter-spacing:-.65px}
+.product-color{margin-top:12px}
+.product-photo{width:150px;height:165px;filter:drop-shadow(0 14px 12px #29163c20)}
+.status-panel{position:relative;overflow:hidden;border-radius:24px;padding:25px 21px;min-height:140px;background:linear-gradient(125deg,#8435e7,#6221c6 75%);box-shadow:0 12px 28px #6124c52b}
+.status-panel:after{content:"";position:absolute;right:-70px;top:-95px;width:230px;height:230px;border:1px solid #ffffff22;border-radius:50%;pointer-events:none}
+.status-panel h2{font-size:23px;line-height:1.2}
+.status-panel p{color:#efe2ff}
+.delivery-progress{background:#fff;border:1px solid var(--line);border-radius:19px;padding:19px 18px 16px;margin-top:14px;box-shadow:0 5px 20px #25123b08}
+.progress-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:17px}
+.progress-heading strong{font-size:15px;font-weight:750}
+.progress-heading span{font-size:12px;color:var(--accent);font-weight:700;text-align:right}
+.progress-track{height:8px;background:#ede8f4;border-radius:99px;overflow:hidden}
+#progress-fill{display:block;width:0;height:100%;border-radius:99px;background:linear-gradient(90deg,#a363f4,#7027d4);transition:width .45s ease}
+.progress-stops{display:flex;justify-content:space-between;gap:5px;margin-top:12px;color:#898292;font-size:10px;font-weight:600}
+.progress-stops span{flex:1;text-align:center}
+.progress-stops span:first-child{text-align:left}
+.progress-stops span:last-child{text-align:right}
+.checked{margin-top:13px;border-radius:16px}
+.primary{border-radius:16px;background:#fff}
+.history{margin-top:32px}
+.history-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}
+.history-heading h2{font-size:23px;margin:0}
+.history-count{font-size:12px;font-weight:700;color:#7a3bbd;background:#eee5fb;padding:7px 10px;border-radius:99px}
+#timeline{border-radius:22px;padding:25px 21px 1px;box-shadow:0 5px 20px #25123b08}
+#timeline li:first-child strong{color:#6320bc}
+@media(max-width:350px){.product-card{padding:15px;min-height:170px}.product-photo{width:112px;height:135px}.subtitle{font-size:18px}.progress-stops{font-size:9px}.status-panel{padding:21px 15px}}
+@media(prefers-reduced-motion:reduce){#progress-fill{transition:none}}

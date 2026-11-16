@@ -1,3 +1,4 @@
+import { DurableObject } from 'cloudflare:workers';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { authorize, mergeObservation, parseStatuses, validateSubscription } from './core.js';
 
@@ -40,12 +41,21 @@ export default {
   },
   async scheduled(_event,env,ctx) {
     const stub = env.MONITOR.get(env.MONITOR.idFromName('owner'));
-    ctx.waitUntil(stub.fetch(new Request('https://monitor/internal/poll',{method:'POST'})));
+    ctx.waitUntil(stub.scheduledPoll());
   },
 };
 
-export class Monitor {
-  constructor(ctx,env) { this.storage=ctx.storage; this.env=env; this.tail=Promise.resolve(); }
+export class Monitor extends DurableObject {
+  constructor(ctx,env) { super(ctx,env); this.ctx=ctx; this.storage=ctx.storage; this.env=env; this.tail=Promise.resolve(); }
+  scheduledPoll() { return this.exclusive(()=>this.poll()); }
+  alarm() { return this.exclusive(async()=>{ const state=await this.load(); await this.flush(state); }); }
+  async scheduleRetry(state) {
+    if (!this.ctx.storage.setAlarm || !this.ctx.storage.deleteAlarm) return;
+    if (state.deliveries.length) {
+      const current=await this.ctx.storage.getAlarm();
+      if (!current || current<=Date.now()) await this.ctx.storage.setAlarm(Date.now()+60000);
+    } else await this.ctx.storage.deleteAlarm();
+  }
   exclusive(action) {
     const job=this.tail.then(action);
     this.tail=job.catch(()=>{});
@@ -54,8 +64,7 @@ export class Monitor {
   fetch(request) { return this.exclusive(()=>this.handle(request)); }
   async handle(request) {
     const path = new URL(request.url).pathname;
-    // Internal requests are made only by this Worker's scheduled handler.
-    if (path === '/internal/poll') { await this.poll(); return json({ok:true}); }
+    if (path.startsWith('/internal/')) return fail('FORBIDDEN',403);
     const ipHash = new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(
       (this.env.API_KEY || '') + (request.headers.get('CF-Connecting-IP') || 'local'))));
     const bucketKey = 'auth:' + [...ipHash.slice(0,12)].map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -68,6 +77,14 @@ export class Monitor {
     }
     if (request.method==='GET' && path==='/api/state') return json(await this.view());
     if (request.method==='POST' && path==='/api/poll') { await this.poll(); return json(await this.view()); }
+    if (request.method==='POST' && path==='/api/recheck') {
+      const state=await this.load();
+      state.latest=state.latest ? {...state.latest,final:false} : null;
+      state.attemptedAt=null;
+      await this.storage.put('state',state);
+      await this.poll();
+      return json(await this.view());
+    }
     if (path==='/api/subscription' && ['POST','DELETE'].includes(request.method)) {
       let subscription;
       try { subscription=validateSubscription(await readJson(request)); }
@@ -96,7 +113,7 @@ export class Monitor {
     return fail('NOT_FOUND',404);
   }
   async load() {
-    return await this.storage.get('state') || {events:[],latest:null,subscriptions:[],deliveries:[],sheetQueue:[]};
+    return await this.storage.get('state') || {events:[],latest:null,subscriptions:[],deliveries:[]};
   }
   async view() {
     const state=await this.load();
@@ -104,8 +121,7 @@ export class Monitor {
       checkedAt:state.checkedAt || null, error:state.error || null,
       upstreamStatus:state.upstreamStatus || null, transportError:state.transportError || null,
       pendingPush:state.deliveries.length, notificationError:state.notificationError || null,
-      sheetError:state.sheetError || null, sheetConfigured:Boolean(this.env.SHEETS_WEBHOOK_URL),
-      sheetUrl:this.env.SHEET_URL || null, vapidPublicKey:this.env.VAPID_PUBLIC_KEY || null,
+      vapidPublicKey:this.env.VAPID_PUBLIC_KEY || null,
       stopped:state.latest?.final || false};
   }
   async poll() {
@@ -117,12 +133,15 @@ export class Monitor {
     state.transportError=null;
     await this.storage.put('state',state);
     try {
-      if (!this.env.WB_TOKEN || !this.env.WB_RID) throw new Error('WB_SETUP');
-      if (!/^[A-Za-z0-9._-]{1,180}$/.test(this.env.WB_RID)) throw new Error('WB_SETUP');
+      if (!this.env.WB_TOKEN) throw new Error('WB_TOKEN_MISSING');
+      if (!this.env.WB_RID) throw new Error('WB_RID_MISSING');
+      if (!/^[A-Za-z0-9._-]{1,180}$/.test(this.env.WB_RID)) throw new Error('WB_RID_FORMAT');
       const wbToken=this.env.WB_TOKEN.trim().replace(/^Bearer\s+/i,'');
       if (wbToken.length>8000 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(wbToken)) throw new Error('WB_TOKEN_FORMAT');
-      const result=await fetch('https://status-tracker.wb.ru/api/v6/statuses/'+this.env.WB_RID+'?lang=ru',{
-        headers:{Authorization:'Bearer '+wbToken,Accept:'application/json'},
+      const result=await fetch('https://status-tracker.wb.ru/api/v6/statuses?lang=ru',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+wbToken,Accept:'application/json','Content-Type':'application/json'},
+        body:JSON.stringify({ids:[this.env.WB_RID]}),
         redirect:'manual',signal:AbortSignal.timeout(15000),
       });
       state.upstreamStatus=result.status;
@@ -131,22 +150,17 @@ export class Monitor {
       const events=parseStatuses(await result.text());
       const {state:observation,changes}=mergeObservation(state.latest ? state : null,events);
       // Import WB history only on first read; later append newly observed events.
-      const rowsForSheet=state.latest ? changes : events;
       Object.assign(state,observation,{checkedAt:new Date().toISOString(),error:null});
       state.deliveries.push(...changes.flatMap(event=>state.subscriptions.map(sub=>({endpoint:sub.endpoint,event}))));
-      if (this.env.SHEETS_WEBHOOK_URL) state.sheetQueue.push(...rowsForSheet);
       await this.storage.put('state',state);
     } catch (error) {
       if (!state.upstreamStatus) state.transportError=['TimeoutError','AbortError','TypeError'].includes(error.name) ? error.name : 'NetworkError';
-      state.error=['WB_SETUP','WB_TOKEN_FORMAT','WB_AUTH','WB_RESPONSE','WB_DATE','WB_UNAVAILABLE'].includes(error.message) ? error.message : 'WB_UNAVAILABLE';
+      state.error=['WB_SETUP','WB_TOKEN_MISSING','WB_RID_MISSING','WB_RID_FORMAT','WB_TOKEN_FORMAT','WB_AUTH','WB_RESPONSE','WB_DATE','WB_UNAVAILABLE'].includes(error.message) ? error.message : 'WB_UNAVAILABLE';
       await this.storage.put('state',state);
     }
     await this.flush(state);
   }
   async flush(state) {
-    if (this.env.SHEETS_WEBHOOK_URL && !state.sheetInitialized) {
-      state.sheetQueue=[...new Map([...state.events,...state.sheetQueue].map(event=>[event.key,event])).values()];
-    }
     state.notificationError=null;
     const pending=[];
     for (const job of state.deliveries) {
@@ -165,28 +179,9 @@ export class Monitor {
       } catch {pending.push(job);state.notificationError='PUSH_UNAVAILABLE';}
       // shortcut: a crash between delivery and acknowledgement can redeliver; tags collapse duplicates on device.
     }
-    state.deliveries=pending.slice(-100);
-    if (state.sheetQueue.length && this.env.SHEETS_WEBHOOK_URL) {
-      try {
-        const url=new URL(this.env.SHEETS_WEBHOOK_URL);
-        if (url.origin!=='https://script.google.com' || !/^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname) || !this.env.SHEETS_WEBHOOK_SECRET) throw new Error('SHEETS_SETUP');
-        const result=await fetch(url.href,{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({secret:this.env.SHEETS_WEBHOOK_SECRET,product:this.env.PRODUCT_NAME,events:state.sheetQueue.slice(0,100)}),
-          redirect:'manual',signal:AbortSignal.timeout(15000)});
-        // Apps Script ContentService redirects once to a Google-owned result URL.
-        let reply=result;
-        if ([301,302,303].includes(result.status)) {
-          const target=new URL(result.headers.get('Location'));
-          if (target.protocol!=='https:' || target.hostname!=='script.googleusercontent.com') throw new Error('SHEETS_REDIRECT');
-          reply=await fetch(target.href,{redirect:'manual',signal:AbortSignal.timeout(10000)});
-        }
-        if (!reply.ok || (await reply.json()).ok!==true) throw new Error('SHEETS_RESPONSE');
-        state.sheetQueue=state.sheetQueue.slice(100);state.sheetError=null;state.sheetInitialized=true;
-      } catch {state.sheetError='SHEETS_UNAVAILABLE';}
-    }
-    // Keep pending queue bounded during extended outages; WB history remains in events.
-    state.sheetQueue=state.sheetQueue.slice(-100);
+    state.deliveries=pending;
     await this.storage.put('state',state);
+    await this.scheduleRetry(state);
   }
 }
 

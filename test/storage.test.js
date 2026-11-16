@@ -45,3 +45,9 @@ test('rejected key is never saved',async()=>{
   const local=storage();await connect(await boot(local,storage(),false));
   assert.equal(local.getItem('parcel-key'),null);
 });
+
+test('push subscription state is cleared when no browser subscription exists',async()=>{
+  const local=storage();
+  const app=await boot(local);
+  assert.equal(app.requests.length,0);
+});
