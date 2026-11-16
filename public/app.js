@@ -5,12 +5,13 @@ if (accessKey) {localStorage.setItem('parcel-key',accessKey);sessionStorage.remo
 let state=null;
 let registration=null;
 let subscriptionConfirmed=false;
+let confirmedSubscriptionEndpoint=null;
 const demo=new URLSearchParams(location.search).has('demo');
 const dateFormat=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'});
 const errors={UNAUTHORIZED:'Ключ трекера не подошёл.',RATE_LIMIT:'Слишком много попыток. Попробуйте позже.',WB_SETUP:'На сервере ещё не настроен доступ к Wildberries.',WB_AUTH:'Нужно обновить доступ к Wildberries на сервере.',WB_RESPONSE:'Wildberries не вернул историю. Сохранён последний известный статус.',WB_DATE:'Не удалось прочитать время события Wildberries.',WB_UNAVAILABLE:'Wildberries сейчас недоступен. Сохранён последний известный статус.',SUBSCRIPTION:'Не удалось подключить уведомления этого браузера.',SUBSCRIPTION_LIMIT:'Подключено слишком много устройств.',NO_SUBSCRIPTION:'Сначала включите уведомления.',UNAVAILABLE:'Сервер временно недоступен.'};
 errors.WB_TOKEN_FORMAT='В секрете WB_TOKEN сохранён не access token. Обновите его в Cloudflare, вставив только значение токена.';
 const showMessage=text=>{$('message').textContent=text;};
-const pushTimeout=(promise,step)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Превышено время ожидания: '+step+'. Перезапустите приложение и попробуйте снова.')),12000))]);
+const pushTimeout=(promise,step,ms=12000)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Превышено время ожидания: '+step+'. Перезапустите приложение и попробуйте снова.')),ms))]);
 
 async function api(path,options={}) {
   if (demo) throw new Error('В демонстрации нет подключения к серверу.');
@@ -47,11 +48,21 @@ async function updatePushControls() {
   const ios=/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
   $('install-hint').hidden=!ios || installed;
   const sub=registration ? await registration.pushManager.getSubscription() : null;
-  if (!sub) subscriptionConfirmed=false;
+  if (!sub || (confirmedSubscriptionEndpoint && sub.endpoint!==confirmedSubscriptionEndpoint)) {subscriptionConfirmed=false;confirmedSubscriptionEndpoint=null;}
   $('enable-push').textContent=sub && subscriptionConfirmed ? 'Уведомления включены' : 'Включить уведомления';
   $('enable-push').disabled=demo || !supported || (ios && !installed) || (Boolean(sub) && subscriptionConfirmed) || !state?.vapidPublicKey;
   $('push-controls').hidden=!sub;
   if (!supported && !ios) showMessage('Этот браузер не поддерживает push. Откройте приложение в Safari на iPhone или современном браузере.');
+}
+async function restorePushSubscription() {
+  if (!state?.vapidPublicKey || !registration || !accessKey || demo || Notification.permission!=='granted') return;
+  const sub=await pushTimeout(registration.pushManager.getSubscription(),'проверка подписки');
+  if (!sub) return;
+  if (subscriptionConfirmed && confirmedSubscriptionEndpoint===sub.endpoint) return;
+  await pushTimeout(api('/api/subscription',{method:'POST',body:JSON.stringify(sub.toJSON())}),'синхронизация подписки',20000);
+  subscriptionConfirmed=true;
+  confirmedSubscriptionEndpoint=sub.endpoint;
+  await updatePushControls();
 }
 async function refresh(force=false) {
   $('refresh').disabled=true;
@@ -75,6 +86,7 @@ $('connection-form').addEventListener('submit',async event=>{
     try {state=await api('/api/state');} catch(error) {server=oldServer;accessKey=oldKey;throw error;}
     localStorage.setItem('parcel-server',server);localStorage.setItem('parcel-key',accessKey);sessionStorage.removeItem('parcel-key');
     $('settings').close();render();await updatePushControls();
+    restorePushSubscription().catch(()=>{});
   } catch(error) {$('access-key').setCustomValidity(error.message);$('access-key').reportValidity();}
 });
 $('access-key').addEventListener('input',()=>$('access-key').setCustomValidity(''));
@@ -94,14 +106,15 @@ $('enable-push').addEventListener('click',async()=>{
     const sub=existing || await pushTimeout(registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key}),'подписка iOS');
     showMessage('Сохраняем подписку на сервере…');
     try {await pushTimeout(api('/api/subscription',{method:'POST',body:JSON.stringify(sub.toJSON())}),'сохранение на сервере');}
-    catch(error) {if (!existing) await sub.unsubscribe();throw error;}
+    catch(error) {throw error;}
     subscriptionConfirmed=true;
+    confirmedSubscriptionEndpoint=sub.endpoint;
     showMessage('Уведомления подключены. Отправьте тест, чтобы проверить доставку.');
   } catch(error) {showMessage(error.message || 'Не удалось включить уведомления.');}
   finally {try {await pushTimeout(updatePushControls(),'обновление кнопки');} catch(error) {showMessage(error.message);$('enable-push').disabled=false;}}
 });
 $('disable-push').addEventListener('click',async()=>{
-  try {const sub=await registration.pushManager.getSubscription();if(sub){await api('/api/subscription',{method:'DELETE',body:JSON.stringify(sub.toJSON())});await sub.unsubscribe();}subscriptionConfirmed=false;await updatePushControls();showMessage('Уведомления на этом устройстве отключены.');}
+  try {const sub=await registration.pushManager.getSubscription();if(sub){await api('/api/subscription',{method:'DELETE',body:JSON.stringify(sub.toJSON())});await sub.unsubscribe();}subscriptionConfirmed=false;confirmedSubscriptionEndpoint=null;await updatePushControls();showMessage('Уведомления на этом устройстве отключены.');}
   catch(error){showMessage(error.message);}
 });
 $('test-push').addEventListener('click',async()=>{
@@ -122,5 +135,5 @@ if (demo) {
     {name:'Приехал в сортировочный центр',at:'2026-11-16T11:43:00Z'},
   ]};
   render();$('enable-push').textContent='Включить уведомления';$('enable-push').disabled=true;
-} else if (server && accessKey) await refresh();
+} else if (server && accessKey) {await refresh();restorePushSubscription().catch(()=>{});}
 else if (server) showMessage('Введите ключ трекера в настройках, чтобы загрузить статус.');
