@@ -159,3 +159,18 @@ test('authenticated recheck can recover from an incorrectly final upstream event
     assert.equal((await monitor.view()).stopped,false);
   } finally {globalThis.fetch=old;}
 });
+
+test('WB polling sends POST with RID in JSON ids and parses nested response',async()=>{
+  const {monitor,env}=fixture();
+  const original=globalThis.fetch;
+  globalThis.fetch=async(url,init)=>{
+    assert.equal(url,'https://status-tracker.wb.ru/api/v6/statuses?lang=ru');
+    assert.equal(init.method,'POST');
+    assert.equal(init.headers['Content-Type'],'application/json');
+    assert.deepEqual(JSON.parse(init.body),{ids:[env.WB_RID]});
+    assert.equal(init.redirect,'manual');
+    return new Response('[[{"status_id":"115","status_name":"В центре","date":1794829439881323000,"is_final":false}]]');
+  };
+  try {await monitor.poll();assert.equal((await monitor.view()).events.length,1);}
+  finally {globalThis.fetch=original;}
+});
