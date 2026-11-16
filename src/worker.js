@@ -40,12 +40,21 @@ export default {
   },
   async scheduled(_event,env,ctx) {
     const stub = env.MONITOR.get(env.MONITOR.idFromName('owner'));
-    ctx.waitUntil(stub.fetch(new Request('https://monitor/internal/poll',{method:'POST'})));
+    ctx.waitUntil(stub.scheduledPoll());
   },
 };
 
 export class Monitor {
-  constructor(ctx,env) { this.storage=ctx.storage; this.env=env; this.tail=Promise.resolve(); }
+  constructor(ctx,env) { this.ctx=ctx; this.storage=ctx.storage; this.env=env; this.tail=Promise.resolve(); }
+  scheduledPoll() { return this.exclusive(()=>this.poll()); }
+  alarm() { return this.exclusive(async()=>{ const state=await this.load(); await this.flush(state); }); }
+  async scheduleRetry(state) {
+    if (!this.ctx.storage.setAlarm || !this.ctx.storage.deleteAlarm) return;
+    if (state.deliveries.length || (state.sheetQueue.length && this.env.SHEETS_WEBHOOK_URL)) {
+      const current=await this.ctx.storage.getAlarm();
+      if (!current || current<=Date.now()) await this.ctx.storage.setAlarm(Date.now()+60000);
+    } else await this.ctx.storage.deleteAlarm();
+  }
   exclusive(action) {
     const job=this.tail.then(action);
     this.tail=job.catch(()=>{});
@@ -54,8 +63,7 @@ export class Monitor {
   fetch(request) { return this.exclusive(()=>this.handle(request)); }
   async handle(request) {
     const path = new URL(request.url).pathname;
-    // Internal requests are made only by this Worker's scheduled handler.
-    if (path === '/internal/poll') { await this.poll(); return json({ok:true}); }
+    if (path.startsWith('/internal/')) return fail('FORBIDDEN',403);
     const ipHash = new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(
       (this.env.API_KEY || '') + (request.headers.get('CF-Connecting-IP') || 'local'))));
     const bucketKey = 'auth:' + [...ipHash.slice(0,12)].map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -68,6 +76,14 @@ export class Monitor {
     }
     if (request.method==='GET' && path==='/api/state') return json(await this.view());
     if (request.method==='POST' && path==='/api/poll') { await this.poll(); return json(await this.view()); }
+    if (request.method==='POST' && path==='/api/recheck') {
+      const state=await this.load();
+      state.latest=state.latest ? {...state.latest,final:false} : null;
+      state.attemptedAt=null;
+      await this.storage.put('state',state);
+      await this.poll();
+      return json(await this.view());
+    }
     if (path==='/api/subscription' && ['POST','DELETE'].includes(request.method)) {
       let subscription;
       try { subscription=validateSubscription(await readJson(request)); }
@@ -165,7 +181,7 @@ export class Monitor {
       } catch {pending.push(job);state.notificationError='PUSH_UNAVAILABLE';}
       // shortcut: a crash between delivery and acknowledgement can redeliver; tags collapse duplicates on device.
     }
-    state.deliveries=pending.slice(-100);
+    state.deliveries=pending;
     if (state.sheetQueue.length && this.env.SHEETS_WEBHOOK_URL) {
       try {
         const url=new URL(this.env.SHEETS_WEBHOOK_URL);
@@ -184,9 +200,8 @@ export class Monitor {
         state.sheetQueue=state.sheetQueue.slice(100);state.sheetError=null;state.sheetInitialized=true;
       } catch {state.sheetError='SHEETS_UNAVAILABLE';}
     }
-    // Keep pending queue bounded during extended outages; WB history remains in events.
-    state.sheetQueue=state.sheetQueue.slice(-100);
     await this.storage.put('state',state);
+    await this.scheduleRetry(state);
   }
 }
 
