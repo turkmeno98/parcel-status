@@ -53,3 +53,15 @@ test('corrected event updates its final flag without duplicate push',()=>{
   assert.equal(result.state.latest.final,true);
   assert.equal(result.changes.length,0);
 });
+
+test('WB nested response from POST statuses parses all events in nanosecond order',()=>{
+  const raw='[['+
+    '{"rid":"test.order","status_id":"199","status_name":"В пути","date":1794824335923046000,"is_final":false},'+
+    '{"rid":"test.order","status_id":"115","status_name":"В центре","date":1794829439881323000,"is_final":false}'+
+    ']]';
+  const events=parseStatuses(raw);
+  assert.equal(events.length,2);
+  assert.equal(events[1].key,'115:1794829439881323000');
+  assert.equal(events[1].at,'2026-11-16T11:43:59.881Z');
+  assert.throws(()=>parseStatuses('[[]]'));
+});
