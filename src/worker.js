@@ -144,6 +144,9 @@ export class Monitor {
     await this.flush(state);
   }
   async flush(state) {
+    if (this.env.SHEETS_WEBHOOK_URL && !state.sheetInitialized) {
+      state.sheetQueue=[...new Map([...state.events,...state.sheetQueue].map(event=>[event.key,event])).values()];
+    }
     state.notificationError=null;
     const pending=[];
     for (const job of state.deliveries) {
@@ -178,7 +181,7 @@ export class Monitor {
           reply=await fetch(target.href,{redirect:'manual',signal:AbortSignal.timeout(10000)});
         }
         if (!reply.ok || (await reply.json()).ok!==true) throw new Error('SHEETS_RESPONSE');
-        state.sheetQueue=state.sheetQueue.slice(100);state.sheetError=null;
+        state.sheetQueue=state.sheetQueue.slice(100);state.sheetError=null;state.sheetInitialized=true;
       } catch {state.sheetError='SHEETS_UNAVAILABLE';}
     }
     // Keep pending queue bounded during extended outages; WB history remains in events.

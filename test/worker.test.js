@@ -106,3 +106,18 @@ test('successful WB polling uses a redirect policy supported by Cloudflare Worke
   try {await monitor.poll();assert.equal((await monitor.view()).events.length,1);}
   finally {globalThis.fetch=original;}
 });
+test('connecting Sheets after the first poll backfills the existing history once',async()=>{
+  const {monitor,env,data}=fixture();
+  const original=globalThis.fetch;let exported=0;
+  globalThis.fetch=async()=>new Response('[{"status_id":"115","status_name":"В центре","date":1794829439881323000,"is_final":false}]');
+  try {
+    await monitor.poll();
+    env.SHEETS_WEBHOOK_URL='https://script.google.com/macros/s/test/exec';
+    env.SHEETS_WEBHOOK_SECRET='test-secret';
+    globalThis.fetch=async(_url,init)=>{exported+=JSON.parse(init.body).events.length;return Response.json({ok:true});};
+    await monitor.flush(await monitor.load());
+    await monitor.flush(await monitor.load());
+    assert.equal(exported,1);
+    assert.equal(data.get('state').sheetQueue.length,0);
+  } finally {globalThis.fetch=original;}
+});
