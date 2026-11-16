@@ -45,3 +45,11 @@ test('rejects private, redirected-looking and unknown push destinations', () => 
   assert.equal(validateSubscription({endpoint:'https://web.push.apple.com/x',keys}).endpoint,
     'https://web.push.apple.com/x');
 });
+
+test('corrected event updates its final flag without duplicate push',()=>{
+  const previous=mergeObservation(null,parseStatuses(response('1794829439881323000'))).state;
+  const corrected=parseStatuses(response('1794829439881323000').replace('false','true'));
+  const result=mergeObservation(previous,corrected);
+  assert.equal(result.state.latest.final,true);
+  assert.equal(result.changes.length,0);
+});
