@@ -133,8 +133,9 @@ export class Monitor {
     state.transportError=null;
     await this.storage.put('state',state);
     try {
-      if (!this.env.WB_TOKEN || !this.env.WB_RID) throw new Error('WB_SETUP');
-      if (!/^[A-Za-z0-9._-]{1,180}$/.test(this.env.WB_RID)) throw new Error('WB_SETUP');
+      if (!this.env.WB_TOKEN) throw new Error('WB_TOKEN_MISSING');
+      if (!this.env.WB_RID) throw new Error('WB_RID_MISSING');
+      if (!/^[A-Za-z0-9._-]{1,180}$/.test(this.env.WB_RID)) throw new Error('WB_RID_FORMAT');
       const wbToken=this.env.WB_TOKEN.trim().replace(/^Bearer\s+/i,'');
       if (wbToken.length>8000 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(wbToken)) throw new Error('WB_TOKEN_FORMAT');
       const result=await fetch('https://status-tracker.wb.ru/api/v6/statuses?lang=ru',{
@@ -156,7 +157,7 @@ export class Monitor {
       await this.storage.put('state',state);
     } catch (error) {
       if (!state.upstreamStatus) state.transportError=['TimeoutError','AbortError','TypeError'].includes(error.name) ? error.name : 'NetworkError';
-      state.error=['WB_SETUP','WB_TOKEN_FORMAT','WB_AUTH','WB_RESPONSE','WB_DATE','WB_UNAVAILABLE'].includes(error.message) ? error.message : 'WB_UNAVAILABLE';
+      state.error=['WB_SETUP','WB_TOKEN_MISSING','WB_RID_MISSING','WB_RID_FORMAT','WB_TOKEN_FORMAT','WB_AUTH','WB_RESPONSE','WB_DATE','WB_UNAVAILABLE'].includes(error.message) ? error.message : 'WB_UNAVAILABLE';
       await this.storage.put('state',state);
     }
     await this.flush(state);
