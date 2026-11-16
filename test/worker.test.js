@@ -27,7 +27,7 @@ test('state is private and invalid credentials are rate limited', async () => {
 test('a WB failure preserves history, latest event and records an actionable error', async () => {
   const {monitor,data} = fixture();
   const event = {key:'1:1794829439881323000',ns:'1794829439881323000',name:'В пути',at:'2026-11-16T11:43:59.881Z',final:false};
-  data.set('state',{events:[event],latest:event,deliveries:[],sheetQueue:[],subscriptions:[]});
+  data.set('state',{events:[event],latest:event,deliveries:[],subscriptions:[]});
   const oldFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response('{"result":41}');
   try {
@@ -106,22 +106,6 @@ test('successful WB polling uses a redirect policy supported by Cloudflare Worke
   try {await monitor.poll();assert.equal((await monitor.view()).events.length,1);}
   finally {globalThis.fetch=original;}
 });
-test('connecting Sheets after the first poll backfills the existing history once',async()=>{
-  const {monitor,env,data}=fixture();
-  const original=globalThis.fetch;let exported=0;
-  globalThis.fetch=async()=>new Response('[{"status_id":"115","status_name":"В центре","date":1794829439881323000,"is_final":false}]');
-  try {
-    await monitor.poll();
-    env.SHEETS_WEBHOOK_URL='https://script.google.com/macros/s/test/exec';
-    env.SHEETS_WEBHOOK_SECRET='test-secret';
-    globalThis.fetch=async(_url,init)=>{exported+=JSON.parse(init.body).events.length;return Response.json({ok:true});};
-    await monitor.flush(await monitor.load());
-    await monitor.flush(await monitor.load());
-    assert.equal(exported,1);
-    assert.equal(data.get('state').sheetQueue.length,0);
-  } finally {globalThis.fetch=original;}
-});
-
 test('internal polling endpoint cannot bypass API authorization on Durable Object',async()=>{
   const {monitor}=fixture();
   const res=await monitor.fetch(new Request('https://monitor/internal/poll',{method:'POST'}));
@@ -133,25 +117,15 @@ test('push failure schedules a retry alarm and does not discard pending deliveri
   monitor.ctx.storage.getAlarm=async()=>null;
   monitor.ctx.storage.deleteAlarm=async()=>{};
   const event={key:'1:1794829439881323000',name:'В пути'};
-  data.set('state',{events:[],latest:null,subscriptions:[{endpoint:'https://web.push.apple.com/test',keys:{p256dh:'B'+'a'.repeat(86),auth:'a'.repeat(22)}}],deliveries:[{endpoint:'https://web.push.apple.com/test',event}],sheetQueue:[]});
+  data.set('state',{events:[],latest:null,subscriptions:[{endpoint:'https://web.push.apple.com/test',keys:{p256dh:'B'+'a'.repeat(86),auth:'a'.repeat(22)}}],deliveries:[{endpoint:'https://web.push.apple.com/test',event}]});
   await monitor.flush(await monitor.load());
   assert.equal(data.get('state').deliveries.length,1);
   assert.equal(alarms.length,1);
 });
-test('sheet failures retain all queued events beyond 100 until acknowledgement',async()=>{
-  const {monitor,env,data}=fixture();
-  env.SHEETS_WEBHOOK_URL='https://script.google.com/macros/s/test/exec';
-  env.SHEETS_WEBHOOK_SECRET='test-secret';
-  const events=Array.from({length:130},(_,i)=>({key:'1:'+(1794829439881323000n+BigInt(i)),name:'В пути',at:'2026-11-16T11:43:59.881Z'}));
-  data.set('state',{events:[],latest:null,subscriptions:[],deliveries:[],sheetQueue:events,sheetInitialized:true});
-  const old=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('offline');};
-  try {await monitor.flush(await monitor.load());assert.equal(data.get('state').sheetQueue.length,130);}
-  finally {globalThis.fetch=old;}
-});
 test('authenticated recheck can recover from an incorrectly final upstream event',async()=>{
   const {monitor,data}=fixture();
   const event={key:'1:1794829439881323000',ns:'1794829439881323000',at:'2026-11-16T11:43:59.881Z',name:'Доставлено',final:true};
-  data.set('state',{events:[event],latest:event,subscriptions:[],deliveries:[],sheetQueue:[]});
+  data.set('state',{events:[event],latest:event,subscriptions:[],deliveries:[]});
   const old=globalThis.fetch;globalThis.fetch=async()=>new Response('[{"status_id":"2","status_name":"В пути","date":1794829439881323001,"is_final":false}]');
   try {
     const res=await monitor.fetch(new Request('https://monitor/api/recheck',{method:'POST',headers:{Authorization:'Bearer '+key}}));
@@ -173,4 +147,12 @@ test('WB polling sends POST with RID in JSON ids and parses nested response',asy
   };
   try {await monitor.poll();assert.equal((await monitor.view()).events.length,1);}
   finally {globalThis.fetch=original;}
+});
+
+test('tracker state contains no Google Sheets integration fields',async()=>{
+  const {monitor}=fixture();
+  const state=await monitor.view();
+  assert.equal('sheetConfigured' in state,false);
+  assert.equal('sheetError' in state,false);
+  assert.equal('sheetUrl' in state,false);
 });
